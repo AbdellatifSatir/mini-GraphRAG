@@ -3,3 +3,5 @@ matplotlib
 google-generativeai
 python-dotenv
 python-louvain
+sentence-transformers
+faiss-cpu

@@ -2,6 +2,10 @@ import os
 import json
 import networkx as nx
 import google.generativeai as genai
+import numpy as np
+import faiss
+import pickle
+from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 # 1. Configuration & Setup
@@ -13,6 +17,10 @@ if not API_KEY:
 
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
+
+# Load Embedding Model for Vector Search
+print("Loading Embedding Model...")
+embed_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 def get_query_type(query):
     """Determines if the query is 'Local' (specific entities) or 'Global' (broad themes)."""
@@ -40,18 +48,49 @@ def extract_entities_from_query(query):
     entities = [e.strip() for e in response.text.split(",")]
     return entities
 
+def vector_search_nodes(query_entities, index_file="node_index.faiss", mapping_file="node_mapping.pkl", top_k=2):
+    """Finds the most similar nodes in the graph using FAISS."""
+    if not os.path.exists(index_file) or not os.path.exists(mapping_file):
+        return []
+
+    index = faiss.read_index(index_file)
+    with open(mapping_file, "rb") as f:
+        all_nodes = pickle.load(f)
+
+    resolved_nodes = []
+    for entity in query_entities:
+        query_embedding = embed_model.encode([entity]).astype('float32')
+        distances, indices = index.search(query_embedding, top_k)
+        
+        for idx in indices[0]:
+            if idx != -1:
+                resolved_nodes.append(all_nodes[idx])
+    
+    return list(set(resolved_nodes))
+
 def map_entities_to_nodes(query_entities, graph_nodes):
-    """Uses Gemini to map extracted entities from the query to existing graph nodes."""
+    """
+    Hybrid Entity Resolution:
+    1. Use Vector Search (FAISS) to find top candidates.
+    2. Use Gemini to refine and confirm the mapping.
+    """
     if not query_entities or not graph_nodes:
         return []
 
+    # Step 1: Vector Search for candidates
+    candidates = vector_search_nodes(query_entities)
+    
+    if not candidates:
+        return []
+
+    # Step 2: LLM refinement
     prompt = f"""
-    You are an Entity Resolver. Map the user's 'Query Entities' to the most likely 'Graph Nodes' from the list below.
+    You are an Entity Resolver. Map the user's 'Query Entities' to the most likely 'Graph Nodes' from the candidate list below.
     Only return the exact names from the 'Graph Nodes' list, separated by commas.
     If no match is found for an entity, ignore it.
 
     Query Entities: {", ".join(query_entities)}
-    Graph Nodes: {", ".join(graph_nodes)}
+    Graph Nodes (Candidates): {", ".join(candidates)}
 
     Mapped Nodes:"""
     
@@ -64,7 +103,10 @@ def get_local_context(entities, graph_file="knowledge_graph.graphml", hops=2):
     if not os.path.exists(graph_file): return ""
     G = nx.read_graphml(graph_file)
     all_nodes = list(G.nodes())
+    
+    # RESOLUTION STEP: Use Hybrid Mapping
     resolved_nodes = map_entities_to_nodes(entities, all_nodes)
+    print(f"   Resolved Nodes: {resolved_nodes}")
     
     context_triples = []
     for target_node in resolved_nodes:
@@ -109,7 +151,7 @@ def generate_grounded_answer(query, context, q_type):
     return response.text
 
 def main():
-    print("--- Welcome to the Advanced GraphRAG Assistant (Phase 4) ---")
+    print("--- Welcome to the Advanced GraphRAG Assistant (Phase 5 - Hybrid) ---")
     
     while True:
         query = input("\nAsk a question (or 'exit'): ").strip()
