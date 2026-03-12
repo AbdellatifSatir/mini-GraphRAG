@@ -1,18 +1,29 @@
 {
-    "0": {
-        "nodes": [
-            "Quantum Dynamics",
-            "Berlin",
-            "Sarah Chen",
-            "Quantum Computing"
-        ],
-        "summary": "This community details Quantum Dynamics, a Berlin-based firm founded by Sarah Chen specializing in Quantum Computing."
+    "level_0": {
+        "0": {
+            "nodes": [
+                "Quantum Dynamics",
+                "Berlin",
+                "Sarah Chen",
+                "Quantum Computing"
+            ],
+            "summary": "Quantum Dynamics is a Berlin-based quantum computing company founded by Sarah Chen."
+        },
+        "1": {
+            "nodes": [
+                "University of Berlin",
+                "Germany"
+            ],
+            "summary": "The University of Berlin is an academic institution located in Germany."
+        }
     },
-    "1": {
-        "nodes": [
-            "University of Berlin",
-            "Germany"
-        ],
-        "summary": "This community represents the national context and geographical location of the University of Berlin within Germany."
+    "level_1": {
+        "0": {
+            "summary": "The document provides an overview of key technological and academic entities in Berlin, focusing on Sarah Chen\u2019s quantum computing company, Quantum Dynamics, and the University of Berlin.",
+            "children": [
+                "0",
+                "1"
+            ]
+        }
     }
 }

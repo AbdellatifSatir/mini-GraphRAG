@@ -14,7 +14,7 @@ if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found in .env file. Please check .env.example.")
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = genai.GenerativeModel('gemini-flash-latest')
 
 def extract_kg_from_text(text):
     """Uses Gemini to extract entities and relationships in JSON format."""
@@ -49,9 +49,9 @@ def extract_kg_from_text(text):
 
     return json.loads(raw_text)
 
-def generate_community_summaries(G):
-    """Groups nodes into communities and asks Gemini to summarize each."""
-    # Louvain works on undirected graphs
+def generate_hierarchical_summaries(G):
+    """Groups nodes into communities, summarizes them, then groups summaries for a higher-level view."""
+    # --- Level 0: Base Communities ---
     undirected_G = G.to_undirected()
     partition = community_louvain.best_partition(undirected_G)
     
@@ -61,35 +61,35 @@ def generate_community_summaries(G):
             communities[community_id] = []
         communities[community_id].append(node)
     
-    summaries = {}
-    print(f"Detected {len(communities)} communities. Summarizing...")
+    level_0_summaries = {}
+    print(f"Level 0: Detected {len(communities)} communities. Summarizing...")
     
     for comm_id, nodes in communities.items():
-        # Get edges within this community for context
-        edges = []
-        for u, v, d in G.edges(data=True):
-            if u in nodes and v in nodes:
-                edges.append(f"{u} --[{d['relation']}]--> {v}")
+        edges = [f"{u} --[{d['relation']}]--> {v}" for u, v, d in G.edges(data=True) if u in nodes and v in nodes]
         
-        prompt = f"""
-        Given this community of entities and their relationships, provide a one-sentence summary of what this community represents in the context of the larger document.
-        
-        Entities: {', '.join(nodes)}
-        Relationships: {', '.join(edges)}
-        
-        Summary:"""
-        
+        prompt = f"Provide a one-sentence summary for this community:\nEntities: {', '.join(nodes)}\nRelationships: {', '.join(edges)}\nSummary:"
         response = model.generate_content(prompt)
-        summaries[comm_id] = {
-            "nodes": nodes,
-            "summary": response.text.strip()
-        }
-        print(f"   Community {comm_id}: {summaries[comm_id]['summary'][:50]}...")
+        level_0_summaries[str(comm_id)] = {"nodes": nodes, "summary": response.text.strip()}
+
+    # --- Level 1: Meta-Communities (Summaries of Summaries) ---
+    # In a real-world scenario, you'd cluster the Level 0 communities based on their inter-connectivity.
+    # For this small graph, we'll create a "Global Root" summary that combines Level 0.
     
-    # Save summaries to JSON
+    print("Level 1: Generating global overview...")
+    combined_summaries = "\n".join([f"- {s['summary']}" for s in level_0_summaries.values()])
+    
+    prompt = f"Given these sub-summaries of a document, provide a high-level one-sentence overview of the entire document:\n{combined_summaries}\nGlobal Summary:"
+    response = model.generate_content(prompt)
+    level_1_summary = response.text.strip()
+
+    hierarchical_data = {
+        "level_0": level_0_summaries,
+        "level_1": {"0": {"summary": level_1_summary, "children": list(level_0_summaries.keys())}}
+    }
+    
     with open("community_summaries.json", "w", encoding="utf-8") as f:
-        json.dump(summaries, f, indent=4)
-    print("Community summaries saved to 'community_summaries.json'.")
+        json.dump(hierarchical_data, f, indent=4)
+    print("Hierarchical summaries saved to 'community_summaries.json'.")
 
 def build_kg_from_data(data):
     """Constructs a NetworkX graph from JSON data and saves it."""
@@ -107,8 +107,8 @@ def build_kg_from_data(data):
     nx.write_graphml(G, "knowledge_graph.graphml")
     print("Graph built and saved to 'knowledge_graph.graphml'.")
     
-    # NEW: Generate Community Summaries
-    generate_community_summaries(G)
+    # NEW: Generate Hierarchical Summaries
+    generate_hierarchical_summaries(G)
     
     return G
 
@@ -149,7 +149,7 @@ def main():
         G = nx.read_graphml(graph_file)
         # If summaries don't exist, generate them
         if not os.path.exists("community_summaries.json"):
-            generate_community_summaries(G)
+            generate_hierarchical_summaries(G)
         visualize_graph(G)
         return
 

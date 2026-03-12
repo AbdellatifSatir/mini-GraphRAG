@@ -16,7 +16,7 @@ if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found in .env file.")
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = genai.GenerativeModel('gemini-flash-latest')
 
 # Load Embedding Model for Vector Search
 print("Loading Embedding Model...")
@@ -117,18 +117,37 @@ def get_local_context(entities, graph_file="knowledge_graph.graphml", hops=2):
     
     return "\n".join(list(set(context_triples)))
 
-def get_global_context(summary_file="community_summaries.json"):
-    """Retrieves context using community summaries."""
+def get_global_context(query, summary_file="community_summaries.json"):
+    """Retrieves context from hierarchical community summaries."""
     if not os.path.exists(summary_file): return "No global summaries available."
     
     with open(summary_file, "r", encoding="utf-8") as f:
-        summaries = json.load(f)
+        hierarchical_data = json.load(f)
     
-    context = []
-    for comm_id, data in summaries.items():
-        context.append(f"Theme {comm_id}: {data['summary']}")
+    # Use Gemini to decide the required level of detail
+    level_0_count = len(hierarchical_data.get("level_0", {}))
+    level_1_summary = hierarchical_data.get("level_1", {}).get("0", {}).get("summary", "")
     
-    return "\n".join(context)
+    prompt = f"""
+    A user has asked a global question. Determine if the answer requires a 'HIGH-LEVEL' overview or 'DETAILED' themes.
+    
+    Question: {query}
+    High-level Overview: {level_1_summary}
+    
+    Respond with either 'HIGH-LEVEL' or 'DETAILED'.
+    Decision:"""
+    
+    response = model.generate_content(prompt)
+    decision = response.text.strip().upper()
+    print(f"   Global Detail Decision: {decision}")
+
+    if "HIGH-LEVEL" in decision:
+        return f"Global Overview: {level_1_summary}"
+    else:
+        context = []
+        for comm_id, data in hierarchical_data["level_0"].items():
+            context.append(f"Detailed Theme {comm_id}: {data['summary']}")
+        return "\n".join(context)
 
 def generate_grounded_answer(query, context, q_type):
     """Uses Gemini to answer the query using the provided context."""
@@ -163,7 +182,7 @@ def main():
 
         if "GLOBAL" in q_type:
             print("   Retrieving Global Context...")
-            context = get_global_context()
+            context = get_global_context(query)
         else:
             print("   Recognizing entities...")
             entities = extract_entities_from_query(query)
