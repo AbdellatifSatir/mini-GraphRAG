@@ -1,0 +1,24 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
+.vscode/
+.idea/
+
+# Graph Outputs (Keep them if you want portability, but large graphs are usually ignored)
+# knowledge_graph.graphml
+# community_summaries.json
+
+# Logs
+*.log

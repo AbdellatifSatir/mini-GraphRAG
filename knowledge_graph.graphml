@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='utf-8'?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+  <key id="d1" for="edge" attr.name="relation" attr.type="string" />
+  <key id="d0" for="node" attr.name="type" attr.type="string" />
+  <graph edgedefault="directed">
+    <node id="Quantum Dynamics">
+      <data key="d0">Organization</data>
+    </node>
+    <node id="Berlin">
+      <data key="d0">Location</data>
+    </node>
+    <node id="Sarah Chen">
+      <data key="d0">Person</data>
+    </node>
+    <node id="Quantum Computing">
+      <data key="d0">Technology</data>
+    </node>
+    <node id="University of Berlin">
+      <data key="d0">Organization</data>
+    </node>
+    <node id="Germany">
+      <data key="d0">Location</data>
+    </node>
+    <edge source="Quantum Dynamics" target="Berlin">
+      <data key="d1">based in</data>
+    </edge>
+    <edge source="Quantum Dynamics" target="Sarah Chen">
+      <data key="d1">founded by</data>
+    </edge>
+    <edge source="Quantum Dynamics" target="Quantum Computing">
+      <data key="d1">specializes in</data>
+    </edge>
+    <edge source="Quantum Dynamics" target="University of Berlin">
+      <data key="d1">collaborates with</data>
+    </edge>
+    <edge source="University of Berlin" target="Germany">
+      <data key="d1">located in</data>
+    </edge>
+  </graph>
+</graphml>
