@@ -8,7 +8,7 @@ Building a modular, automated GraphRAG (Graph Retrieval-Augmented Generation) pi
 - **Graph Engine:** NetworkX (Python)
 - **Vector DB:** FAISS (for hybrid search)
 - **Embeddings:** `all-MiniLM-L6-v2`
-- **Persistence:** GraphML format (`knowledge_graph.graphml`)
+- **Persistence:** Neo4j (Primary), GraphML format (`knowledge_graph.graphml`) (Backup)
 - **Community summaries:** Hierarchical `community_summaries.json`
 - **Environment:** Python 3.10+, `python-dotenv`
 
@@ -18,13 +18,13 @@ Building a modular, automated GraphRAG (Graph Retrieval-Augmented Generation) pi
     - Checks for existing graph.
     - Extracts Entities/Relations in JSON.
     - **Hierarchical Clustering:** Groups nodes into communities (Level 0) and then creates a "Global Overview" (Level 1).
-    - Builds and saves the GraphML file and summaries.
+    - **Neo4j Sync:** Mirrors the NetworkX graph into a Neo4j instance for persistent, queryable storage.
 3.  **`vector_indexer.py`**:
     - Generates embeddings for all graph nodes and stores them in a FAISS index for fuzzy searching.
 4.  **`graph_rag_assistant.py` (The Unified Brain)**:
     - **Step 1 (Query Classification):** Determines if a query is LOCAL (facts) or GLOBAL (themes).
     - **Step 2 (Hybrid Resolution):** Uses Vector Search (FAISS) + LLM refinement to map query terms to exact Graph Nodes.
-    - **Step 3 (Multi-Hop Retrieval):** Performs a 2-hop traversal for local context.
+    - **Step 3 (Neo4j Multi-Hop Retrieval):** Performs a 2-hop traversal directly in Neo4j using Cypher.
     - **Step 4 (Intelligent Global Context):** Uses Gemini to decide if a query needs a high-level (Level 1) or detailed (Level 0) summary.
     - **Step 5 (Grounded Generation):** Answers the query using *only* the retrieved context.
 
@@ -37,10 +37,11 @@ Building a modular, automated GraphRAG (Graph Retrieval-Augmented Generation) pi
 - [x] **Phase 4: Community Detection:** Integrated Louvain clustering and thematic summarization.
 - [x] **Phase 5: Vector Hybrid Search:** Added FAISS for "fuzzy" node mapping and semantic search.
 - [x] **Phase 6: Hierarchical Summarization:** Implemented multi-level summaries (Level 0/Level 1) and intelligent context routing.
+- [x] **Phase 7: Neo4j Integration:** Migrated from file-based GraphML to a professional graph database for retrieval.
 
-## 🚀 Next Steps (Phase 7 & Beyond)
-- [ ] **Phase 7: Neo4j Integration:** Scale the project from a file-based graph to a professional graph database.
-- [ ] **Phase 8: Agentic Graph Traversal:** Give the LLM tools to "walk" the graph dynamically based on query requirements.
+## 🚀 Next Steps (Phase 8 & Beyond)
+- [ ] **Phase 7.5: Community Migration:** Store hierarchical summaries (`community_summaries.json`) directly as `:Community` nodes in Neo4j.
+- [ ] **Phase 8: Agentic Graph Traversal:** Give the LLM tools to "walk" the graph dynamically by generating its own Cypher queries.
 - [ ] **Phase 9: Evaluation (RAGAS):** Measure and compare GraphRAG performance against standard RAG.
 
 ## 💡 How to Resume

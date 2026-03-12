@@ -5,16 +5,58 @@ import matplotlib.pyplot as plt
 import google.generativeai as genai
 from community import community_louvain
 from dotenv import load_dotenv
+from neo4j import GraphDatabase
 
 # 1. Configuration & Setup
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Neo4j Config
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USER = os.getenv("NEO4J_USERNAME")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found in .env file. Please check .env.example.")
 
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-flash-latest')
+
+def sync_to_neo4j(G):
+    """Uploads the NetworkX graph to a Neo4j instance."""
+    if not all([NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD]):
+        print("⚠️ Neo4j credentials missing. Skipping sync.")
+        return
+
+    print(f"Syncing {G.number_of_nodes()} nodes and {G.number_of_edges()} edges to Neo4j...")
+    
+    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    
+    with driver.session() as session:
+        # 1. Sync Nodes
+        for node, data in G.nodes(data=True):
+            node_type = data.get("type", "Unknown")
+            session.run(
+                "MERGE (e:Entity {id: $id}) SET e.type = $type",
+                id=node, type=node_type
+            )
+        
+        # 2. Sync Edges
+        for u, v, data in G.edges(data=True):
+            relation = data.get("relation", "connected to")
+            # Using Cypher's APOC or standard MERGE with dynamic relationship types is tricky.
+            # We'll use a generic 'RELATED_TO' type and store the specific relation as a property.
+            session.run(
+                """
+                MATCH (a:Entity {id: $source})
+                MATCH (b:Entity {id: $target})
+                MERGE (a)-[r:RELATED_TO {type: $relation}]->(b)
+                """,
+                source=u, target=v, relation=relation
+            )
+            
+    driver.close()
+    print("✅ Sync to Neo4j complete.")
 
 def extract_kg_from_text(text):
     """Uses Gemini to extract entities and relationships in JSON format."""
@@ -145,11 +187,15 @@ def main():
 
     # Check if the graph already exists
     if os.path.exists(graph_file):
-        print(f"Existing graph found: '{graph_file}'. Loading for visualization...")
+        print(f"Existing graph found: '{graph_file}'. Loading for visualization and sync...")
         G = nx.read_graphml(graph_file)
         # If summaries don't exist, generate them
         if not os.path.exists("community_summaries.json"):
             generate_hierarchical_summaries(G)
+        
+        # Sync to Neo4j
+        sync_to_neo4j(G)
+        
         visualize_graph(G)
         return
 
@@ -166,6 +212,10 @@ def main():
         kg_data = extract_kg_from_text(source_text)
         print("Successfully extracted data.")
         G = build_kg_from_data(kg_data)
+        
+        # Sync to Neo4j
+        sync_to_neo4j(G)
+        
         visualize_graph(G)
     except Exception as e:
         print(f"An error occurred: {e}")

@@ -1,16 +1,21 @@
 import os
 import json
-import networkx as nx
 import google.generativeai as genai
 import numpy as np
 import faiss
 import pickle
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
+from neo4j import GraphDatabase
 
 # 1. Configuration & Setup
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Neo4j Config
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USER = os.getenv("NEO4J_USERNAME")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found in .env file.")
@@ -29,11 +34,21 @@ def get_query_type(query):
     - LOCAL: Questions about specific people, organizations, or facts (e.g., "Who founded X?").
     - GLOBAL: Questions about high-level summaries, themes, or "what is this document about?".
     
+    Respond ONLY with the word 'LOCAL' or 'GLOBAL'.
+    
     Question: {query}
-    Classification (LOCAL/GLOBAL):"""
+    Classification:"""
     
     response = model.generate_content(prompt)
-    return response.text.strip().upper()
+    classification = response.text.strip().upper()
+    
+    # Extract only the key word to be safe
+    if "GLOBAL" in classification and "LOCAL" not in classification:
+        return "GLOBAL"
+    elif "LOCAL" in classification and "GLOBAL" not in classification:
+        return "LOCAL"
+    # Fallback: Check if GLOBAL is the last word or alone
+    return "GLOBAL" if "GLOBAL" in classification else "LOCAL"
 
 def extract_entities_from_query(query):
     """Asks Gemini to identify the main entities mentioned in the user's question."""
@@ -98,24 +113,53 @@ def map_entities_to_nodes(query_entities, graph_nodes):
     resolved_nodes = [n.strip() for n in response.text.split(",") if n.strip() in graph_nodes]
     return resolved_nodes
 
-def get_local_context(entities, graph_file="knowledge_graph.graphml", hops=2):
-    """Retrieves context using 2-hop graph traversal."""
-    if not os.path.exists(graph_file): return ""
-    G = nx.read_graphml(graph_file)
-    all_nodes = list(G.nodes())
+def get_local_context(entities, hops=2):
+    """Retrieves context using Neo4j Cypher queries for multi-hop traversal."""
+    if not all([NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD]):
+        return "Neo4j connection not configured."
+
+    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     
-    # RESOLUTION STEP: Use Hybrid Mapping
+    # 1. Fetch all entity IDs from Neo4j to help with mapping
+    with driver.session() as session:
+        result = session.run("MATCH (e:Entity) RETURN e.id AS id")
+        all_nodes = [record["id"] for record in result]
+    
+    # 2. Map query entities to graph nodes
     resolved_nodes = map_entities_to_nodes(entities, all_nodes)
     print(f"   Resolved Nodes: {resolved_nodes}")
     
+    if not resolved_nodes:
+        driver.close()
+        return ""
+
     context_triples = []
-    for target_node in resolved_nodes:
-        ego = nx.ego_graph(G, target_node, radius=hops, undirected=True)
-        for u, v, d in ego.edges(data=True):
-            relation = d.get('relation', 'connected to')
-            context_triples.append(f"{u} --[{relation}]--> {v}")
     
-    return "\n".join(list(set(context_triples)))
+    # 3. Perform Multi-Hop Traversal in Neo4j
+    with driver.session() as session:
+        for target_node in resolved_nodes:
+            # Find all nodes and relationships within 'hops' distance
+            # We use RELATED_TO and extract the 'type' property for the relation label
+            query = """
+            MATCH (n:Entity {id: $node_id})
+            MATCH (n)-[r:RELATED_TO*1..%d]-(m:Entity)
+            UNWIND r AS rel
+            RETURN startNode(rel).id AS source, endNode(rel).id AS target, rel.type AS relation
+            """ % hops
+            
+            result = session.run(query, node_id=target_node)
+            for record in result:
+                context_triples.append(f"{record['source']} --[{record['relation']}]--> {record['target']}")
+    
+    driver.close()
+    
+    final_context = "\n".join(list(set(context_triples)))
+    if final_context:
+        print(f"   Context Triples Found:\n{final_context}")
+    else:
+        print("   No context triples found.")
+        
+    return final_context
 
 def get_global_context(query, summary_file="community_summaries.json"):
     """Retrieves context from hierarchical community summaries."""
@@ -170,7 +214,7 @@ def generate_grounded_answer(query, context, q_type):
     return response.text
 
 def main():
-    print("--- Welcome to the Advanced GraphRAG Assistant (Phase 5 - Hybrid) ---")
+    print("--- Welcome to the Advanced GraphRAG Assistant (Phase 7 - Neo4j) ---")
     
     while True:
         query = input("\nAsk a question (or 'exit'): ").strip()
@@ -186,7 +230,7 @@ def main():
         else:
             print("   Recognizing entities...")
             entities = extract_entities_from_query(query)
-            print(f"   Retrieving Local Context for: {entities}...")
+            print(f"   Retrieving Local Context for: {entities} from Neo4j...")
             context = get_local_context(entities)
         
         # 2. Generate Answer
