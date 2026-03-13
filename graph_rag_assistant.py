@@ -5,23 +5,17 @@ import numpy as np
 import faiss
 import pickle
 from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
 from neo4j import GraphDatabase
+from config import GEMINI_MODEL_NAME, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, COMMUNITY_SUMMARIES_FILE, FAISS_INDEX_FILE, NODE_MAPPING_FILE
 
 # 1. Configuration & Setup
-load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
-
-# Neo4j Config
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USER = os.getenv("NEO4J_USERNAME")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found in .env file.")
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-flash-latest')
+model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 
 # Load Embedding Model for Vector Search
 print("Loading Embedding Model...")

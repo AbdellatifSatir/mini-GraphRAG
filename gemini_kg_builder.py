@@ -4,23 +4,17 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import google.generativeai as genai
 from community import community_louvain
-from dotenv import load_dotenv
 from neo4j import GraphDatabase
+from config import GEMINI_MODEL_NAME, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, KNOWLEDGE_GRAPH_FILE, COMMUNITY_SUMMARIES_FILE, SOURCE_TEXT_FILE
 
 # 1. Configuration & Setup
-load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
-
-# Neo4j Config
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USER = os.getenv("NEO4J_USERNAME")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found in .env file. Please check .env.example.")
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-flash-latest')
+model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 
 def sync_to_neo4j(G):
     """Uploads the NetworkX graph to a Neo4j instance."""
