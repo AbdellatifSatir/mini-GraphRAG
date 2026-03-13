@@ -36,28 +36,28 @@ Traditional RAG often struggles with global "big picture" questions (e.g., "What
 - Creates a FAISS index of all node names.
 - Maps user query terms (e.g., "Sarah") to exact graph nodes (e.g., "Sarah Chen").
 
-### 3. Unified RAG Assistant (`graph_rag_assistant.py`)
-- **Query Classification:** Determines if a query is `LOCAL` (facts) or `GLOBAL` (themes).
-- **Hybrid Resolution:** Combines Vector Search and LLM refinement to find entry points in the graph.
-- **Neo4j Multi-Hop:** Performs 2-hop traversals via Cypher to gather factual context.
-- **Intelligent Routing:** Decides whether to use detailed Level 0 summaries or the high-level Level 1 overview.
-- **Grounded Generation:** Produces answers strictly based on the retrieved context.
+### 4. Agentic GraphRAG Assistant (`agentic_graph_rag.py` & `agent_tools.py`)
+- **Reasoning Loop:** Implements a Thought-Action-Observation loop (ReAct) for dynamic exploration.
+- **Dynamic Cypher Generation:** The LLM generates and executes Cypher queries based on the graph schema.
+- **Tools:**
+  - `get_schema()`: Inspects database structure.
+  - `resolve_entities()`: Maps vague query terms to graph nodes.
+  - `run_cypher()`: Executes multi-hop traversals.
 
 ---
 
-## ✅ Accomplishments (Phases 1-7)
+## ✅ Accomplishments (Phases 1-8)
 - [x] **Phase 1-2:** Automated KG construction and GraphML persistence.
 - [x] **Phase 3-4:** Community detection and thematic summarization.
 - [x] **Phase 5:** FAISS-based semantic entity resolution.
 - [x] **Phase 6:** Hierarchical context routing (Local vs. Global).
 - [x] **Phase 7:** Full Neo4j integration for persistent retrieval.
-- [x] **Structural Update:** Centralized configuration in `config.py` for model and DB management.
+- [x] **Phase 7.5:** Community Migration (Summaries in Neo4j).
+- [x] **Phase 8:** Agentic Graph Traversal (Dynamic Cypher generation and reasoning loop).
 
 ---
 
 ## 🚀 Next Steps
-- [ ] **Phase 7.5: Community Migration:** Move hierarchical summaries from JSON to Neo4j `:Community` nodes.
-- [ ] **Phase 8: Agentic Traversal:** Allow Gemini to generate dynamic Cypher queries for complex reasoning.
 - [ ] **Phase 9: Evaluation:** benchmark performance using the RAGAS framework.
 
 ---

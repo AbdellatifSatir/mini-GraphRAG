@@ -1,48 +1,44 @@
 # GraphRAG Hands-on Project State
 
 ## 🎯 Current Objective
-Building a modular, automated GraphRAG (Graph Retrieval-Augmented Generation) pipeline using Python, NetworkX, and Gemini 1.5 Flash.
+Building a modular, automated GraphRAG (Graph Retrieval-Augmented Generation) pipeline using Python, NetworkX, and Gemini 1.5/2.0 Flash.
 
 ## 🛠️ Tech Stack
-- **LLM:** Google Gemini 1.5 Flash (`gemini-flash-latest`)
-- **Graph Engine:** NetworkX (Python)
+- **LLM:** Google Gemini 1.5/2.0/2.5 Flash & Pro (via `config.py` priority list)
+- **Graph Engine:** NetworkX (Python) & Neo4j (Database)
 - **Vector DB:** FAISS (for hybrid search)
 - **Embeddings:** `all-MiniLM-L6-v2`
 - **Persistence:** Neo4j (Primary), GraphML format (`knowledge_graph.graphml`) (Backup)
-- **Community summaries:** Hierarchical `community_summaries.json`
+- **Community summaries:** Stored as `:Community` nodes in Neo4j
 - **Environment:** Python 3.10+, `python-dotenv`
 
 ## 🏗️ Project Architecture
 1.  **`source_text.txt`**: The raw knowledge base (unstructured text).
 2.  **`gemini_kg_builder.py`**: 
-    - Checks for existing graph.
-    - Extracts Entities/Relations in JSON.
-    - **Hierarchical Clustering:** Groups nodes into communities (Level 0) and then creates a "Global Overview" (Level 1).
-    - **Neo4j Sync:** Mirrors the NetworkX graph into a Neo4j instance for persistent, queryable storage.
+    - Extracts Entities/Relations.
+    - **Hierarchical Clustering:** Groups nodes into communities (Level 0/Level 1).
+    - **Neo4j Sync:** Mirrors the graph into Neo4j.
 3.  **`vector_indexer.py`**:
-    - Generates embeddings for all graph nodes and stores them in a FAISS index for fuzzy searching.
-4.  **`graph_rag_assistant.py` (The Unified Brain)**:
-    - **Step 1 (Query Classification):** Determines if a query is LOCAL (facts) or GLOBAL (themes).
-    - **Step 2 (Hybrid Resolution):** Uses Vector Search (FAISS) + LLM refinement to map query terms to exact Graph Nodes.
-    - **Step 3 (Neo4j Multi-Hop Retrieval):** Performs a 2-hop traversal directly in Neo4j using Cypher.
-    - **Step 4 (Intelligent Global Context):** Uses Gemini to decide if a query needs a high-level (Level 1) or detailed (Level 0) summary.
-    - **Step 5 (Grounded Generation):** Answers the query using *only* the retrieved context.
+    - Generates embeddings for nodes and stores them in FAISS.
+4.  **`agentic_graph_rag.py` (The Intelligent Agent)**:
+    - **ReAct Loop:** Implements Thought-Action-Observation reasoning.
+    - **Dynamic Cypher Generation:** Agent writes its own queries to explore the graph.
+    - **Tool-Based Retrieval:** Uses `agent_tools.py` for schema inspection, entity resolution, and Cypher execution.
+5.  **`graph_rag_assistant.py` (Legacy Pipeline)**:
+    - Fixed classification and 2-hop retrieval logic.
 
 ## ✅ Accomplishments
 - [x] Automated KG Construction from text.
-- [x] Persistent storage (Phase 2).
-- [x] Unified RAG Assistant (Phase 3).
-- [x] Multi-Hop Retrieval (2-hop depth).
-- [x] Semantic Entity Resolution (mapping vague terms to nodes).
-- [x] **Phase 4: Community Detection:** Integrated Louvain clustering and thematic summarization.
-- [x] **Phase 5: Vector Hybrid Search:** Added FAISS for "fuzzy" node mapping and semantic search.
-- [x] **Phase 6: Hierarchical Summarization:** Implemented multi-level summaries (Level 0/Level 1) and intelligent context routing.
-- [x] **Phase 7: Neo4j Integration:** Migrated from file-based GraphML to a professional graph database for retrieval.
-- [x] **Phase 7.5: Community Migration:** Stored hierarchical summaries directly as `:Community` nodes in Neo4j. Refactored Assistant to retrieve global context via Cypher.
+- [x] Persistent storage in Neo4j.
+- [x] Semantic Entity Resolution using FAISS.
+- [x] **Phase 4-6:** Community Detection and Hierarchical Summarization.
+- [x] **Phase 7-7.5:** Full Neo4j Integration (Entities + Community Summaries).
+- [x] **Phase 8: Agentic Graph Traversal:** Implemented a reasoning loop with dynamic Cypher generation and tool-based research.
+- [x] **Configuration Layer:** Centralized model and DB management in `config.py` with automatic model priority.
 
-## 🚀 Next Steps (Phase 8 & Beyond)
-- [ ] **Phase 8: Agentic Graph Traversal:** Give the LLM tools to "walk" the graph dynamically by generating its own Cypher queries.
+## 🚀 Next Steps (Phase 9 & Beyond)
 - [ ] **Phase 9: Evaluation (RAGAS):** Measure and compare GraphRAG performance against standard RAG.
+- [ ] **Phase 10: Production Refinement:** Implement automatic error correction for Cypher syntax and more robust tool parsing.
 
 ## 💡 How to Resume
-To continue this session, provide the AI with the contents of `source_text.txt`, `gemini_kg_builder.py`, and `graph_rag_assistant.py`. Ask to proceed with the **"Neo4j Integration"** phase as outlined in `GEMINI.md`.
+To continue, provide the contents of `source_text.txt`, `config.py`, `agent_tools.py`, and `agentic_graph_rag.py`. Ask to proceed with **Phase 9: Evaluation**.

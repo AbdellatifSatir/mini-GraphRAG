@@ -21,3 +21,8 @@
   3. Testing Semantic "Fuzzy" Resolution
    * "Tell me about the Berlin-based Quantum center."
        * Goal: Tests if FAISS can resolve "Quantum center" to Quantum Dynamics even though the words don't match exactly.
+
+
+Who founded the company that collaborates with the University of Berlin?  -  it's a multi-step question.
+Who is the founder of the company based in Berlin? - hallucination in reasoning 
+Who is the founder of the company based in Berlin?

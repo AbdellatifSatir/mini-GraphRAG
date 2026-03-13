@@ -4,8 +4,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Gemini Configuration ---
-# Options: 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', etc.
-GEMINI_MODEL_NAME = "gemini-2.0-flash-lite" 
+# Priority list: The system will try these in order if a quota limit is hit.
+GEMINI_MODELS_PRIORITY = [
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemini-flash-latest"
+]
+
+# Keep a default for single-model scripts
+GEMINI_MODEL_NAME = GEMINI_MODELS_PRIORITY[0]
 
 # --- Neo4j Configuration ---
 NEO4J_URI = os.getenv("NEO4J_URI")
