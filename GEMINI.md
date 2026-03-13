@@ -38,9 +38,9 @@ Building a modular, automated GraphRAG (Graph Retrieval-Augmented Generation) pi
 - [x] **Phase 5: Vector Hybrid Search:** Added FAISS for "fuzzy" node mapping and semantic search.
 - [x] **Phase 6: Hierarchical Summarization:** Implemented multi-level summaries (Level 0/Level 1) and intelligent context routing.
 - [x] **Phase 7: Neo4j Integration:** Migrated from file-based GraphML to a professional graph database for retrieval.
+- [x] **Phase 7.5: Community Migration:** Stored hierarchical summaries directly as `:Community` nodes in Neo4j. Refactored Assistant to retrieve global context via Cypher.
 
 ## 🚀 Next Steps (Phase 8 & Beyond)
-- [ ] **Phase 7.5: Community Migration:** Store hierarchical summaries (`community_summaries.json`) directly as `:Community` nodes in Neo4j.
 - [ ] **Phase 8: Agentic Graph Traversal:** Give the LLM tools to "walk" the graph dynamically by generating its own Cypher queries.
 - [ ] **Phase 9: Evaluation (RAGAS):** Measure and compare GraphRAG performance against standard RAG.
 

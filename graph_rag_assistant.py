@@ -155,17 +155,20 @@ def get_local_context(entities, hops=2):
         
     return final_context
 
-def get_global_context(query, summary_file="community_summaries.json"):
-    """Retrieves context from hierarchical community summaries."""
-    if not os.path.exists(summary_file): return "No global summaries available."
+def get_global_context(query):
+    """Retrieves context from Neo4j :Community nodes instead of a local JSON file."""
+    if not all([NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD]):
+        return "Neo4j connection not configured."
+
+    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     
-    with open(summary_file, "r", encoding="utf-8") as f:
-        hierarchical_data = json.load(f)
+    # 1. Fetch Level 1 (Global) summary to help LLM decide
+    with driver.session() as session:
+        result = session.run("MATCH (c:Community {level: 1}) RETURN c.summary AS summary LIMIT 1")
+        record = result.single()
+        level_1_summary = record["summary"] if record else "No global summary found."
     
-    # Use Gemini to decide the required level of detail
-    level_0_count = len(hierarchical_data.get("level_0", {}))
-    level_1_summary = hierarchical_data.get("level_1", {}).get("0", {}).get("summary", "")
-    
+    # 2. Use Gemini to decide the required level of detail
     prompt = f"""
     A user has asked a global question. Determine if the answer requires a 'HIGH-LEVEL' overview or 'DETAILED' themes.
     
@@ -179,13 +182,18 @@ def get_global_context(query, summary_file="community_summaries.json"):
     decision = response.text.strip().upper()
     print(f"   Global Detail Decision: {decision}")
 
-    if "HIGH-LEVEL" in decision:
-        return f"Global Overview: {level_1_summary}"
-    else:
-        context = []
-        for comm_id, data in hierarchical_data["level_0"].items():
-            context.append(f"Detailed Theme {comm_id}: {data['summary']}")
-        return "\n".join(context)
+    context = []
+    with driver.session() as session:
+        if "HIGH-LEVEL" in decision:
+            context.append(f"Global Overview: {level_1_summary}")
+        else:
+            # Fetch all Level 0 summaries
+            result = session.run("MATCH (c:Community {level: 0}) RETURN c.id AS id, c.summary AS summary")
+            for record in result:
+                context.append(f"Detailed Theme {record['id']}: {record['summary']}")
+    
+    driver.close()
+    return "\n".join(context)
 
 def generate_grounded_answer(query, context, q_type):
     """Uses Gemini to answer the query using the provided context."""
