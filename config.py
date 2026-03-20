@@ -15,7 +15,7 @@ GEMINI_MODELS_PRIORITY = [
 ]
 
 # Keep a default for single-model scripts
-GEMINI_MODEL_NAME = GEMINI_MODELS_PRIORITY[0]
+GEMINI_MODEL_NAME = "gemini-2.0-flash-lite-001"
 
 # --- Neo4j Configuration ---
 NEO4J_URI = os.getenv("NEO4J_URI")

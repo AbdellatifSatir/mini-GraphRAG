@@ -5,3 +5,5 @@ python-dotenv
 python-louvain
 sentence-transformers
 faiss-cpu
+streamlit
+neo4j

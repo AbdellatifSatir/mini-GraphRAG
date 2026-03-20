@@ -1,7 +1,7 @@
 import os
 import json
 import google.generativeai as genai
-from config import GEMINI_MODEL_NAME
+from config import GEMINI_MODELS_PRIORITY
 from agent_tools import GraphTools
 
 # 1. Configuration & Setup
@@ -10,7 +10,24 @@ if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found in .env file.")
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+
+def get_working_model():
+    """Tries models in priority order until one works or all fail."""
+    for model_name in GEMINI_MODELS_PRIORITY:
+        try:
+            model = genai.GenerativeModel(model_name)
+            # Simple test call to check quota
+            model.generate_content("test", generation_config={"max_output_tokens": 1})
+            print(f"Using model: {model_name}")
+            return model
+        except Exception as e:
+            if "429" in str(e) or "ResourceExhausted" in str(e):
+                print(f"⚠️ Quota hit for {model_name}. Trying next...")
+                continue
+            else:
+                print(f"⚠️ Error with {model_name}: {e}. Trying next...")
+                continue
+    raise RuntimeError("All Gemini models in priority list failed or hit quota.")
 
 SYSTEM_PROMPT = """
 You are a GraphRAG Researcher. Your goal is to answer user questions by exploring a Neo4j Knowledge Graph.
@@ -43,6 +60,13 @@ You have access to the following tools:
 
 def main():
     print("--- Welcome to the Agentic GraphRAG Assistant (Phase 8) ---")
+    
+    try:
+        model = get_working_model()
+    except Exception as e:
+        print(f"Critical Error: {e}")
+        return
+
     tools = GraphTools()
     
     while True:
@@ -54,22 +78,21 @@ def main():
         
         # Max turns for the reasoning loop
         for _ in range(7):
-            response = chat.send_message(prompt)
-            print(f"\n{response.text}")
-            
-            if "FINAL ANSWER:" in response.text:
-                break
-            
-            # Robust Tool Parsing
             try:
-                # Find a line that looks like a function call
+                response = chat.send_message(prompt)
+                print(f"\n{response.text}")
+                
+                if "FINAL ANSWER:" in response.text:
+                    break
+                
+                # Robust Tool Parsing
                 import re
                 match = re.search(r"(\w+)\((.*)\)", response.text)
                 if match:
                     tool_name = match.group(1).lower()
                     raw_args = match.group(2).strip()
                     
-                    # Clean up arguments (remove parameter names like cypher_query=)
+                    # Clean up arguments
                     if "=" in raw_args and not (raw_args.startswith("{") or raw_args.startswith("[")):
                         raw_args = raw_args.split("=", 1)[1].strip()
                     
@@ -90,10 +113,17 @@ def main():
                     prompt = "OBSERVATION: No valid tool call detected. Use the format: TOOL_NAME(\"ARGUMENT\")."
                     print(f"\n   -> {prompt}")
             except Exception as e:
-                prompt = f"OBSERVATION: Error parsing action. {str(e)}."
+                if "429" in str(e) or "ResourceExhausted" in str(e):
+                    print("\n⚠️ Quota hit during turn. Attempting to switch models...")
+                    try:
+                        model = get_working_model()
+                        chat = model.start_chat(history=chat.history)
+                        continue # Retry the same prompt with new model
+                    except:
+                        print("All models exhausted.")
+                        break
+                prompt = f"OBSERVATION: Error parsing action or executing tool. {str(e)}."
                 print(f"\n   -> {prompt}")
-
-    tools.close()
 
     tools.close()
 
