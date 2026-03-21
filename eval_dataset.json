@@ -1,0 +1,22 @@
+[
+    {
+        "question": "In what city is Quantum Dynamics based?",
+        "ground_truth": "Quantum Dynamics is based in Berlin.",
+        "reference_context": "Quantum Dynamics is a technology firm based in Berlin."
+    },
+    {
+        "question": "Which research institution does Quantum Dynamics collaborate with?",
+        "ground_truth": "Quantum Dynamics collaborates with the University of Berlin.",
+        "reference_context": "The company specializes in Quantum Computing and collaborates with the University of Berlin."
+    },
+    {
+        "question": "Who founded the company that specializes in Quantum Computing?",
+        "ground_truth": "Sarah Chen founded Quantum Dynamics, which specializes in Quantum Computing.",
+        "reference_context": "Quantum Dynamics ... was founded by Sarah Chen in 2015. The company specializes in Quantum Computing."
+    },
+    {
+        "question": "What is the primary relationship between Quantum Dynamics and the University of Berlin?",
+        "ground_truth": "They are collaborators, specifically in the field of Quantum Computing research in Germany.",
+        "reference_context": "Quantum Dynamics ... collaborates with the University of Berlin. The University of Berlin is a leading research institution in Germany."
+    }
+]

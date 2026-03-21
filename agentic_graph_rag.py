@@ -1,7 +1,7 @@
 import os
 import json
 import google.generativeai as genai
-from config import GEMINI_MODELS_PRIORITY
+from config import GEMINI_MODELS_PRIORITY, retry_on_quota
 from agent_tools import GraphTools
 
 # 1. Configuration & Setup
@@ -11,15 +11,22 @@ if not API_KEY:
 
 genai.configure(api_key=API_KEY)
 
+WORKING_MODEL = None
+
 def get_working_model():
     """Tries models in priority order until one works or all fail."""
+    global WORKING_MODEL
+    if WORKING_MODEL:
+        return WORKING_MODEL
+
     for model_name in GEMINI_MODELS_PRIORITY:
         try:
             model = genai.GenerativeModel(model_name)
             # Simple test call to check quota
             model.generate_content("test", generation_config={"max_output_tokens": 1})
-            print(f"Using model: {model_name}")
-            return model
+            print(f"Using model for Agent: {model_name}")
+            WORKING_MODEL = model
+            return WORKING_MODEL
         except Exception as e:
             if "429" in str(e) or "ResourceExhausted" in str(e):
                 print(f"⚠️ Quota hit for {model_name}. Trying next...")
@@ -58,72 +65,83 @@ You have access to the following tools:
 - If a tool fails, try a different Cypher query.
 """
 
+@retry_on_quota(max_retries=5, initial_wait=10)
+def query_agent(user_input, model=None, tools=None):
+    """Executes a single question through the agentic loop and returns answer + context."""
+    if not model:
+        model = get_working_model()
+    if not tools:
+        tools = GraphTools()
+        should_close_tools = True
+    else:
+        should_close_tools = False
+
+    chat = model.start_chat(history=[])
+    prompt = f"{SYSTEM_PROMPT}\n\nUser Question: {user_input}"
+    
+    final_answer = "No answer generated."
+    collected_observations = []
+
+    # Max turns for the reasoning loop
+    for _ in range(7):
+        try:
+            response = chat.send_message(prompt)
+            
+            if "FINAL ANSWER:" in response.text:
+                final_answer = response.text.split("FINAL ANSWER:")[1].strip()
+                break
+            
+            # Robust Tool Parsing
+            import re
+            match = re.search(r"(\w+)\((.*)\)", response.text)
+            if match:
+                tool_name = match.group(1).lower()
+                raw_args = match.group(2).strip()
+                
+                if "=" in raw_args and not (raw_args.startswith("{") or raw_args.startswith("[")):
+                    raw_args = raw_args.split("=", 1)[1].strip()
+                
+                if "get_schema" in tool_name:
+                    observation = tools.get_schema()
+                elif "resolve_entities" in tool_name:
+                    clean_args = raw_args.strip("[]").split(",")
+                    entities = [e.strip().strip("'").strip('"') for e in clean_args]
+                    observation = tools.resolve_entities(entities)
+                elif "run_cypher" in tool_name:
+                    observation = tools.run_cypher(raw_args.strip("'").strip('"'))
+                else:
+                    observation = f"Error: Unknown tool '{tool_name}'."
+                
+                collected_observations.append(str(observation))
+                prompt = f"OBSERVATION: {observation}"
+            else:
+                prompt = "OBSERVATION: No valid tool call detected. Use the format: TOOL_NAME(\"ARGUMENT\")."
+        except Exception as e:
+            if "429" in str(e) or "ResourceExhausted" in str(e):
+                model = get_working_model()
+                chat = model.start_chat(history=chat.history)
+                continue
+            prompt = f"OBSERVATION: Error. {str(e)}."
+
+    if should_close_tools:
+        tools.close()
+
+    return {
+        "answer": final_answer,
+        "contexts": collected_observations
+    }
+
 def main():
     print("--- Welcome to the Agentic GraphRAG Assistant (Phase 8) ---")
-    
-    try:
-        model = get_working_model()
-    except Exception as e:
-        print(f"Critical Error: {e}")
-        return
-
+    model = get_working_model()
     tools = GraphTools()
     
     while True:
         user_input = input("\nAsk a question (or 'exit'): ").strip()
         if user_input.lower() == 'exit': break
-
-        chat = model.start_chat(history=[])
-        prompt = f"{SYSTEM_PROMPT}\n\nUser Question: {user_input}"
         
-        # Max turns for the reasoning loop
-        for _ in range(7):
-            try:
-                response = chat.send_message(prompt)
-                print(f"\n{response.text}")
-                
-                if "FINAL ANSWER:" in response.text:
-                    break
-                
-                # Robust Tool Parsing
-                import re
-                match = re.search(r"(\w+)\((.*)\)", response.text)
-                if match:
-                    tool_name = match.group(1).lower()
-                    raw_args = match.group(2).strip()
-                    
-                    # Clean up arguments
-                    if "=" in raw_args and not (raw_args.startswith("{") or raw_args.startswith("[")):
-                        raw_args = raw_args.split("=", 1)[1].strip()
-                    
-                    if "get_schema" in tool_name:
-                        observation = tools.get_schema()
-                    elif "resolve_entities" in tool_name:
-                        clean_args = raw_args.strip("[]").split(",")
-                        entities = [e.strip().strip("'").strip('"') for e in clean_args]
-                        observation = tools.resolve_entities(entities)
-                    elif "run_cypher" in tool_name:
-                        observation = tools.run_cypher(raw_args.strip("'").strip('"'))
-                    else:
-                        observation = f"Error: Unknown tool '{tool_name}'."
-                    
-                    prompt = f"OBSERVATION: {observation}"
-                    print(f"\n   -> {prompt}")
-                else:
-                    prompt = "OBSERVATION: No valid tool call detected. Use the format: TOOL_NAME(\"ARGUMENT\")."
-                    print(f"\n   -> {prompt}")
-            except Exception as e:
-                if "429" in str(e) or "ResourceExhausted" in str(e):
-                    print("\n⚠️ Quota hit during turn. Attempting to switch models...")
-                    try:
-                        model = get_working_model()
-                        chat = model.start_chat(history=chat.history)
-                        continue # Retry the same prompt with new model
-                    except:
-                        print("All models exhausted.")
-                        break
-                prompt = f"OBSERVATION: Error parsing action or executing tool. {str(e)}."
-                print(f"\n   -> {prompt}")
+        result = query_agent(user_input, model=model, tools=tools)
+        print(f"\nFINAL ANSWER: {result['answer']}")
 
     tools.close()
 

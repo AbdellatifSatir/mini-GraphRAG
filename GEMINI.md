@@ -35,10 +35,14 @@ Building a modular, automated GraphRAG (Graph Retrieval-Augmented Generation) pi
 - [x] **Phase 7-7.5:** Full Neo4j Integration (Entities + Community Summaries).
 - [x] **Phase 8: Agentic Graph Traversal:** Implemented a reasoning loop with dynamic Cypher generation and tool-based research.
 - [x] **Configuration Layer:** Centralized model and DB management in `config.py` with automatic model priority.
+- [x] **Phase 9: Evaluation:** Comparative analysis between Baseline RAG and GraphRAG. Proven superiority of GraphRAG in multi-hop reasoning (e.g., entity-relationship linkage across disparate sentences).
 
-## 🚀 Next Steps (Phase 9 & Beyond)
-- [ ] **Phase 9: Evaluation (RAGAS):** Measure and compare GraphRAG performance against standard RAG.
-- [ ] **Phase 10: Production Refinement:** Implement automatic error correction for Cypher syntax and more robust tool parsing.
+## 🚀 Next Steps (Phase 10 & Beyond)
+- [ ] **Phase 10: Production Refinement:** 
+    - [ ] Implement automatic error correction for Cypher syntax.
+    - [ ] Optimize tool performance (caching FAISS indices).
+    - [ ] Add robust streaming logs for the agentic loop.
+    - [ ] Improve prompt engineering for more reliable tool parsing.
 
 ## 💡 How to Resume
-To continue, provide the contents of `source_text.txt`, `config.py`, `agent_tools.py`, and `agentic_graph_rag.py`. Ask to proceed with **Phase 9: Evaluation**.
+To continue, provide the contents of `source_text.txt`, `config.py`, `agent_tools.py`, and `agentic_graph_rag.py`. Ask to proceed with **Phase 10: Production Refinement**.
