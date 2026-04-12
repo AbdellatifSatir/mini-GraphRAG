@@ -93,7 +93,7 @@ def query_agent(user_input, model=None, tools=None):
     collected_observations = []
 
     # Max turns for the reasoning loop
-    for turn in range(10):
+    for turn in range(15):
         try:
             print(f"\n--- Turn {turn+1} ---")
             response = chat.send_message(prompt)

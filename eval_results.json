@@ -1,0 +1,72 @@
+[
+    {
+        "question": "In what city is Quantum Dynamics based?",
+        "ground_truth": "Quantum Dynamics is based in Berlin.",
+        "baseline": {
+            "answer": "Quantum Dynamics is based in Berlin.",
+            "contexts": [
+                "Quantum Dynamics is a technology firm based in Berlin",
+                "The company specializes in Quantum Computing and collaborates with the University of Berlin"
+            ]
+        },
+        "graphrag": {
+            "answer": "Quantum Dynamics is based in Berlin.",
+            "contexts": [
+                "Entity Resolution Results: {'Quantum Dynamics': ['Quantum Dynamics', 'Quantum Computing']}",
+                "Cypher Results: [{'city.id': 'Berlin'}]"
+            ]
+        }
+    },
+    {
+        "question": "Which research institution does Quantum Dynamics collaborate with?",
+        "ground_truth": "Quantum Dynamics collaborates with the University of Berlin.",
+        "baseline": {
+            "answer": "Quantum Dynamics collaborates with the University of Berlin.",
+            "contexts": [
+                "Quantum Dynamics is a technology firm based in Berlin",
+                "The company specializes in Quantum Computing and collaborates with the University of Berlin"
+            ]
+        },
+        "graphrag": {
+            "answer": "Quantum Dynamics collaborates with the University of Berlin.",
+            "contexts": [
+                "Entity Resolution Results: {'Quantum Dynamics': ['Quantum Dynamics', 'Quantum Computing']}",
+                "Cypher Results: [{'institution.id': 'University of Berlin'}]"
+            ]
+        }
+    },
+    {
+        "question": "Who founded the company that specializes in Quantum Computing?",
+        "ground_truth": "Sarah Chen founded Quantum Dynamics, which specializes in Quantum Computing.",
+        "baseline": {
+            "answer": "The provided context does not state who founded the company that specializes in Quantum Computing.",
+            "contexts": [
+                "The company specializes in Quantum Computing and collaborates with the University of Berlin",
+                "Quantum Dynamics is a technology firm based in Berlin"
+            ]
+        },
+        "graphrag": {
+            "answer": "Sarah Chen",
+            "contexts": [
+                "Entity Resolution Results: {'Quantum Computing': ['Quantum Computing', 'Quantum Dynamics']}",
+                "Cypher Results: [{'company.id': 'Quantum Dynamics'}]",
+                "Cypher Results: [{'founder.id': 'Sarah Chen'}]"
+            ]
+        }
+    },
+    {
+        "question": "What is the primary relationship between Quantum Dynamics and the University of Berlin?",
+        "ground_truth": "They are collaborators, specifically in the field of Quantum Computing research in Germany.",
+        "baseline": {
+            "answer": "Quantum Dynamics collaborates with the University of Berlin.",
+            "contexts": [
+                "Quantum Dynamics is a technology firm based in Berlin",
+                "The company specializes in Quantum Computing and collaborates with the University of Berlin"
+            ]
+        },
+        "graphrag": {
+            "answer": "No answer generated.",
+            "contexts": []
+        }
+    }
+]
