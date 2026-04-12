@@ -5,8 +5,12 @@ import faiss
 from sentence_transformers import SentenceTransformer
 import pickle
 
-def build_vector_index(graph_file="knowledge_graph.graphml", index_file="node_index.faiss", mapping_file="node_mapping.pkl"):
+def build_vector_index(graph_file="knowledge_graph.graphml", index_file="node_index.faiss", mapping_file="node_mapping.pkl", force=False):
     """Creates a FAISS index for all nodes in the Knowledge Graph."""
+    if not force and os.path.exists(index_file) and os.path.exists(mapping_file):
+        print(f"✅ Vector index already exists at {index_file}. Use force=True to re-build.")
+        return
+
     if not os.path.exists(graph_file):
         print(f"Error: {graph_file} not found.")
         return

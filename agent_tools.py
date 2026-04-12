@@ -15,6 +15,22 @@ embed_model = SentenceTransformer('all-MiniLM-L6-v2')
 class GraphTools:
     def __init__(self):
         self.driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+        
+        # Pre-load Vector Index for fast Entity Resolution
+        if os.path.exists(FAISS_INDEX_FILE) and os.path.exists(NODE_MAPPING_FILE):
+            try:
+                self.index = faiss.read_index(FAISS_INDEX_FILE)
+                with open(NODE_MAPPING_FILE, "rb") as f:
+                    self.all_nodes = pickle.load(f)
+                print("✅ Vector Index and Node Mapping loaded.")
+            except Exception as e:
+                print(f"⚠️ Error loading Vector Index: {e}")
+                self.index = None
+                self.all_nodes = None
+        else:
+            print("⚠️ Vector Index files missing. Entity resolution will be disabled.")
+            self.index = None
+            self.all_nodes = None
 
     def close(self):
         self.driver.close()
@@ -49,19 +65,18 @@ class GraphTools:
         Tool: Maps vague entity names from the query to exact node IDs in the graph using FAISS.
         Example: 'Sarah' -> 'Sarah Chen'
         """
-        if not os.path.exists(FAISS_INDEX_FILE) or not os.path.exists(NODE_MAPPING_FILE):
-            return "Error: FAISS index or mapping file missing."
-
-        index = faiss.read_index(FAISS_INDEX_FILE)
-        with open(NODE_MAPPING_FILE, "rb") as f:
-            all_nodes = pickle.load(f)
+        if self.index is None or self.all_nodes is None:
+            return "Error: Vector Index not available for resolution."
 
         resolved = {}
         for entity in query_entities:
-            query_embedding = embed_model.encode([entity]).astype('float32')
-            distances, indices = index.search(query_embedding, k=2)
-            candidates = [all_nodes[idx] for idx in indices[0] if idx != -1]
-            resolved[entity] = candidates
+            try:
+                query_embedding = embed_model.encode([entity]).astype('float32')
+                distances, indices = self.index.search(query_embedding, k=2)
+                candidates = [self.all_nodes[idx] for idx in indices[0] if idx != -1]
+                resolved[entity] = candidates
+            except Exception as e:
+                resolved[entity] = f"Error during resolution: {str(e)}"
         
         return f"Entity Resolution Results: {resolved}"
 
@@ -75,4 +90,6 @@ class GraphTools:
                 data = [record.data() for record in result]
                 return f"Cypher Results: {data}" if data else "Cypher Results: No data found."
         except Exception as e:
-            return f"Error executing Cypher: {str(e)}"
+            # Provide schema context on error to help the agent self-correct
+            schema = self.get_schema()
+            return f"Error executing Cypher: {str(e)}\n\nPlease check your syntax against the schema:\n{schema}"

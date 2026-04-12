@@ -17,7 +17,7 @@ genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 
 def sync_to_neo4j(G):
-    """Uploads the NetworkX graph to a Neo4j instance."""
+    """Uploads the NetworkX graph and community summaries to a Neo4j instance."""
     if not all([NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD]):
         print("⚠️ Neo4j credentials missing. Skipping sync.")
         return
@@ -27,7 +27,7 @@ def sync_to_neo4j(G):
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     
     with driver.session() as session:
-        # 1. Sync Nodes
+        # 1. Sync Entities (Nodes)
         for node, data in G.nodes(data=True):
             node_type = data.get("type", "Unknown")
             session.run(
@@ -35,11 +35,9 @@ def sync_to_neo4j(G):
                 id=node, type=node_type
             )
         
-        # 2. Sync Edges
+        # 2. Sync Entity Relationships (Edges)
         for u, v, data in G.edges(data=True):
             relation = data.get("relation", "connected to")
-            # Using Cypher's APOC or standard MERGE with dynamic relationship types is tricky.
-            # We'll use a generic 'RELATED_TO' type and store the specific relation as a property.
             session.run(
                 """
                 MATCH (a:Entity {id: $source})
@@ -48,9 +46,57 @@ def sync_to_neo4j(G):
                 """,
                 source=u, target=v, relation=relation
             )
+
+        # 3. Sync Communities (Hierarchical Summaries)
+        if os.path.exists("community_summaries.json"):
+            print("--- Syncing Community Summaries to Neo4j ---")
+            with open("community_summaries.json", "r", encoding="utf-8") as f:
+                comm_data = json.load(f)
+
+            # Sync Level 0
+            for comm_id, info in comm_data.get("level_0", {}).items():
+                summary = info.get("summary", "")
+                nodes = info.get("nodes", [])
+                
+                session.run(
+                    "MERGE (c:Community {id: $id, level: 0}) SET c.summary = $summary",
+                    id=comm_id, summary=summary
+                )
+                
+                for node_id in nodes:
+                    session.run(
+                        """
+                        MATCH (e:Entity {id: $entity_id})
+                        MATCH (c:Community {id: $comm_id, level: 0})
+                        MERGE (e)-[:BELONGS_TO]->(c)
+                        """,
+                        entity_id=node_id, comm_id=comm_id
+                    )
+
+            # Sync Level 1 (Meta-Communities)
+            for meta_id, info in comm_data.get("level_1", {}).items():
+                summary = info.get("summary", "")
+                children = info.get("children", [])
+                meta_node_id = f"meta-{meta_id}"
+                
+                session.run(
+                    "MERGE (c:Community {id: $id, level: 1}) SET c.summary = $summary",
+                    id=meta_node_id, summary=summary
+                )
+                
+                for child_id in children:
+                    session.run(
+                        """
+                        MATCH (child:Community {id: $child_id, level: 0})
+                        MATCH (parent:Community {id: $parent_id, level: 1})
+                        MERGE (child)-[:CHILD_OF]->(parent)
+                        """,
+                        child_id=child_id, parent_id=meta_node_id
+                    )
+            print("✅ Community summaries synced to Neo4j.")
             
     driver.close()
-    print("✅ Sync to Neo4j complete.")
+    print("✅ Full sync to Neo4j complete.")
 
 def extract_kg_from_text(text):
     """Uses Gemini to extract entities and relationships in JSON format."""
