@@ -1,6 +1,8 @@
 import os
 import re
 import json
+import time
+import datetime
 import google.generativeai as genai
 from config import GEMINI_MODELS_PRIORITY, retry_on_quota
 from agent_tools import GraphTools
@@ -13,6 +15,11 @@ if not API_KEY:
 genai.configure(api_key=API_KEY)
 
 WORKING_MODEL = None
+LOG_DIR = "agent_logs"
+
+# Ensure log directory exists
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
 
 def get_working_model():
     """Tries models in priority order until one works or all fail."""
@@ -23,57 +30,81 @@ def get_working_model():
     for model_name in GEMINI_MODELS_PRIORITY:
         try:
             model = genai.GenerativeModel(model_name)
-            # Simple test call to check quota
-            model.generate_content("test", generation_config={"max_output_tokens": 1})
-            print(f"Using model for Agent: {model_name}")
+            # Test the model with a tiny prompt to see if it's over quota
+            model.generate_content("test")
             WORKING_MODEL = model
+            print(f"Using model for Agent: {model_name}")
             return WORKING_MODEL
         except Exception as e:
             if "429" in str(e) or "ResourceExhausted" in str(e):
-                print(f"⚠️ Quota hit for {model_name}. Trying next...")
+                print(f"⚠️ Model {model_name} is over quota. Trying next...")
                 continue
             else:
-                print(f"⚠️ Error with {model_name}: {e}. Trying next...")
+                # If it's a different error, we still try the next one but log it
+                print(f"⚠️ Model {model_name} failed: {e}. Trying next...")
                 continue
-    raise RuntimeError("All Gemini models in priority list failed or hit quota.")
+    
+    raise RuntimeError("All configured Gemini models are over quota or failing.")
 
 SYSTEM_PROMPT = """
 You are a GraphRAG Researcher. Your goal is to answer user questions by exploring a Neo4j Knowledge Graph.
 
 You have access to the following tools:
-1. get_schema(): Returns the current graph labels and relationship types.
-2. resolve_entities(query_entities: list): Maps vague terms to exact node IDs in the graph.
+1. get_schema(): Returns the current graph labels and relationship types. Use this early to understand the graph structure.
+2. resolve_entities(query_entities: list): Maps vague terms to exact node IDs in the graph. ALWAYS do this before querying a specific entity by ID.
 3. run_cypher(cypher_query: str): Executes a query and returns the results.
 
---- CYPHER TIPS ---
-- Most relationships are labeled :RELATED_TO. 
-- Specific meanings are stored in the 'type' property of the relationship.
-- Example to find who founded a company:
-  MATCH (c:Entity)-[r:RELATED_TO {type: 'founded by'}]->(founder:Entity) RETURN founder.id
-- Example to find a company based in Berlin:
-  MATCH (c:Entity)-[r:RELATED_TO {type: 'based in'}]->(l:Entity {id: 'Berlin'}) RETURN c.id
+--- CYPHER GUIDELINES ---
+- All nodes have the label ':Entity'.
+- The unique identifier for a node is 'id'.
+- Most relationships are labeled ':RELATED_TO'.
+- The specific meaning of a relationship is in the 'type' property (e.g., [r:RELATED_TO {type: 'founded by'}]).
+- Example: MATCH (n:Entity {id: 'Apple'})-[r:RELATED_TO]->(m:Entity) RETURN m.id, r.type
 
 --- REASONING PROTOCOL ---
-For every turn, you MUST use the following format:
-THOUGHT: <explain your reasoning>
-ACTION: <TOOL_NAME>(<ARGUMENTS>)
+You must follow this exact format for every turn:
+THOUGHT: <your reasoning about what to do next>
+ACTION: <TOOL_NAME>(<JSON_FORMAT_ARGUMENTS>)
 STOP
 
-Example:
-THOUGHT: I need to find the founder of Quantum Dynamics. First, I'll resolve the entity.
-ACTION: resolve_entities(["Quantum Dynamics"])
+Examples:
+THOUGHT: I need to find information about "SpaceX". First, I'll resolve the entity name to a graph ID.
+ACTION: resolve_entities(["SpaceX"])
 STOP
 
-Once you have enough information, use this format:
-THOUGHT: I have found all the necessary information.
-FINAL ANSWER: <your comprehensive answer>
+THOUGHT: I have the schema and the resolved entity. Now I will query its relationships.
+ACTION: run_cypher("MATCH (e:Entity {id: 'SpaceX'})-[r:RELATED_TO]->(target) RETURN target.id, r.type")
+STOP
 
---- CRITICAL RULES ---
-- Never make up data.
-- Always use resolve_entities() to get the correct 'id' of a node before querying it in Cypher.
-- If a tool fails, try a different Cypher query or check the schema.
-- Use only the tools provided. Do not invent tools.
+Once you have the final answer:
+THOUGHT: I have enough information.
+FINAL ANSWER: <your comprehensive answer based on the findings>
+
+--- RULES ---
+- NEVER make up facts. Only use information returned by tools.
+- If a Cypher query fails, read the error message and the schema hint, then try a corrected query.
+- Always use resolve_entities() first if the user mentions a specific name.
 """
+
+def log_session_start(user_input, model_name):
+    """Creates a new log file for the session."""
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{LOG_DIR}/session_{timestamp}.md"
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(f"# Agentic GraphRAG Session Log\n")
+        f.write(f"**Date:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"**Model:** {model_name}\n")
+        f.write(f"**Question:** {user_input}\n\n")
+        f.write(f"## Reasoning Trace\n\n")
+    return filename
+
+def log_turn(filename, turn, response_text, observation=None):
+    """Appends a single reasoning turn to the log file."""
+    with open(filename, "a", encoding="utf-8") as f:
+        f.write(f"### Turn {turn}\n")
+        f.write(f"{response_text}\n\n")
+        if observation:
+            f.write(f"**Observation:**\n```\n{observation}\n```\n\n")
 
 @retry_on_quota(max_retries=5, initial_wait=10)
 def query_agent(user_input, model=None, tools=None):
@@ -86,6 +117,7 @@ def query_agent(user_input, model=None, tools=None):
     else:
         should_close_tools = False
 
+    log_file = log_session_start(user_input, model.model_name)
     chat = model.start_chat(history=[])
     prompt = f"{SYSTEM_PROMPT}\n\nUser Question: {user_input}"
     
@@ -102,61 +134,64 @@ def query_agent(user_input, model=None, tools=None):
 
             if "FINAL ANSWER:" in response_text:
                 final_answer = response_text.split("FINAL ANSWER:")[1].strip()
+                log_turn(log_file, turn + 1, response_text)
                 break
 
-            # Robust Tool Parsing: Look for ACTION: TOOL_NAME(ARGS)
-            # We now search for the tool name and then find the content between the first '(' and the LAST ')' 
-            # before the STOP or end of string.
-            action_header_match = re.search(r"ACTION:\s*(\w+)\(", response_text, re.IGNORECASE)
+            # Robust Tool Parsing
+            action_match = re.search(r"ACTION:\s*(\w+)\((.*)\)", response_text, re.DOTALL | re.IGNORECASE)
             
-            if action_header_match:
-                tool_name = action_header_match.group(1).lower().strip()
-                # Find the start of arguments (just after the first '(')
-                start_idx = action_header_match.end()
+            observation = None
+            if action_match:
+                tool_name = action_match.group(1).lower().strip()
+                raw_args = action_match.group(2).strip()
                 
-                # Find the matching closing parenthesis. 
-                # Since we don't have complex nested tool calls, we look for the last ')' 
-                # that appears before "STOP" or end of text.
-                remaining_text = response_text[start_idx:]
-                stop_idx = remaining_text.find("STOP")
-                if stop_idx == -1: stop_idx = len(remaining_text)
-                
-                last_paren_idx = remaining_text[:stop_idx].rfind(")")
-                if last_paren_idx != -1:
-                    raw_args = remaining_text[:last_paren_idx].strip()
-                else:
-                    raw_args = remaining_text[:stop_idx].strip()
-
-                # Clean up arguments: Only strip quotes if they wrap the entire string
-                if (raw_args.startswith("'") and raw_args.endswith("'")) or \
-                   (raw_args.startswith('"') and raw_args.endswith('"')):
-                    raw_args = raw_args[1:-1].strip()
+                # Clean up STOP if it was captured in args
+                if raw_args.endswith("STOP"):
+                    raw_args = raw_args[:-4].strip()
+                if raw_args.endswith(")"): # Handle extra closing paren
+                     raw_args = raw_args[:-1].strip()
 
                 print(f"🛠️  Calling Tool: {tool_name}")
-                if "get_schema" in tool_name:
-                    observation = tools.get_schema()
-                elif "resolve_entities" in tool_name:
-                    # Parse list of entities more robustly
-                    entities = [e.strip().strip("'").strip('"') for e in raw_args.strip("[]").split(",")]
-                    observation = tools.resolve_entities(entities)
-                elif "run_cypher" in tool_name:
-                    # Don't strip too much; the LLM might provide a complex query
-                    observation = tools.run_cypher(raw_args)
-                else:
-                    observation = f"Error: Unknown tool '{tool_name}'."
+                try:
+                    if "get_schema" in tool_name:
+                        observation = tools.get_schema()
+                    elif "resolve_entities" in tool_name:
+                        # Handle both ["entity"] and "entity" formats
+                        if raw_args.startswith("[") and raw_args.endswith("]"):
+                            entities = json.loads(raw_args.replace("'", '"'))
+                        else:
+                            entities = [raw_args.strip("'").strip('"')]
+                        observation = tools.resolve_entities(entities)
+                    elif "run_cypher" in tool_name:
+                        # Strip surrounding quotes from the Cypher query
+                        query = raw_args.strip().strip("'").strip('"').strip('`')
+                        observation = tools.run_cypher(query)
+                    else:
+                        observation = f"Error: Unknown tool '{tool_name}'."
+                except Exception as tool_err:
+                    observation = f"Error parsing arguments for {tool_name}: {tool_err}. Use JSON format for arguments."
 
                 print(f"👁️  Observation: {observation}")
                 collected_observations.append(str(observation))
                 prompt = f"OBSERVATION: {observation}"
             else:
-                prompt = "OBSERVATION: No valid 'ACTION: TOOL_NAME(ARGUMENTS)' format detected. Please follow the protocol: THOUGHT, then ACTION, then STOP."
+                prompt = "OBSERVATION: Invalid format. You MUST provide 'THOUGHT:', 'ACTION: TOOL_NAME(ARGS)', and 'STOP'."
                 print(f"⚠️  {prompt}")
+
+            log_turn(log_file, turn + 1, response_text, observation)
+            
         except Exception as e:
             if "429" in str(e) or "ResourceExhausted" in str(e):
-                model = get_working_model()
-                chat = model.start_chat(history=chat.history)
+                print("⚠️ Quota hit in loop, retrying...")
+                time.sleep(10)
                 continue
-            prompt = f"OBSERVATION: Error. {str(e)}."
+            error_msg = f"Critical Loop Error: {str(e)}."
+            prompt = f"OBSERVATION: {error_msg}"
+            log_turn(log_file, turn + 1, f"CRITICAL ERROR: {error_msg}")
+
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(f"\n## Final Synthesis\n")
+        f.write(f"{final_answer}\n")
 
     if should_close_tools:
         tools.close()
@@ -167,7 +202,7 @@ def query_agent(user_input, model=None, tools=None):
     }
 
 def main():
-    print("--- Welcome to the Agentic GraphRAG Assistant (Phase 8) ---")
+    print("--- Welcome to the Agentic GraphRAG Assistant (Phase 10: Production) ---")
     model = get_working_model()
     tools = GraphTools()
     

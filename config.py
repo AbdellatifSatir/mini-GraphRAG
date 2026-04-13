@@ -31,11 +31,13 @@ def retry_on_quota(max_retries=5, initial_wait=30):
 # --- Gemini Configuration ---
 # Priority list: The system will try these in order if a quota limit is hit.
 GEMINI_MODELS_PRIORITY = [
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
     "gemini-2.0-flash",
     "gemini-2.5-flash",
     "gemini-flash-latest",
+    "gemini-2.0-flash-lite",
+    "gemini-2.5-flash-lite",
     "gemini-flash-lite-latest",
     "gemini-pro-latest"
 ]
